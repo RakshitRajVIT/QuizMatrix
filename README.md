@@ -1,6 +1,8 @@
 # 🎯 QuizMatrix - Real-Time Live Quiz Platform
 
-A modern, real-time quiz platform for **Matrix Club** built with React and Firebase. Host live quizzes for your college technical club with synchronized questions, timers, and instant leaderboards.
+**QuizMatrix** is a modern, real-time quiz platform for clubs and events. Built with React and Firebase, it lets you host live quizzes, manage questions, and track scores instantly.
+
+[Live Site](https://matrix-4bee5.web.app)
 
 ![Matrix Club Logo](public/matrix-logo.svg)
 
