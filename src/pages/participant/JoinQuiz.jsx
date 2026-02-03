@@ -4,11 +4,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/Header';
-import { useQuiz } from '../../hooks/useQuiz';
+import { useQuiz, useRegisteredQuizzes } from '../../hooks/useQuiz';
+import { useAuth } from '../../context/AuthContext';
 
 const JoinQuiz = () => {
     const navigate = useNavigate();
-    const { getQuizByCode, joinQuiz } = useQuiz();
+    const { getQuizByCode, joinQuiz, isUserAllowedToJoin } = useQuiz();
+    const { user } = useAuth();
+    const { quizzes: registeredQuizzes, loading: registeredLoading } = useRegisteredQuizzes();
 
     const [quizCode, setQuizCode] = useState('');
     const [error, setError] = useState('');
@@ -54,6 +57,16 @@ const JoinQuiz = () => {
                 return;
             }
 
+            // Check if quiz is restricted and user is allowed
+            if (quiz.isRestricted) {
+                const isAllowed = await isUserAllowedToJoin(quiz.id, user.email);
+                if (!isAllowed) {
+                    setError('You are not registered for this quiz. Please contact the quiz host.');
+                    setJoining(false);
+                    return;
+                }
+            }
+
             // Join the quiz
             await joinQuiz(quiz.id);
 
@@ -67,6 +80,32 @@ const JoinQuiz = () => {
 
         setJoining(false);
     };
+
+    const handleJoinRegisteredQuiz = async (quiz) => {
+        if (quiz.status === 'draft') {
+            setError('This quiz hasn\'t started yet. Please wait for the host.');
+            return;
+        }
+
+        if (quiz.status === 'ended') {
+            setError('This quiz has already ended.');
+            return;
+        }
+
+        setJoining(true);
+        try {
+            await joinQuiz(quiz.id);
+            navigate(`/quiz/${quiz.id}`);
+        } catch (err) {
+            console.error('Join error:', err);
+            setError('Failed to join quiz. Please try again.');
+        }
+        setJoining(false);
+    };
+
+    // Filter quizzes by status
+    const upcomingQuizzes = registeredQuizzes.filter(q => q.status === 'draft' || q.status === 'waiting');
+    const liveQuizzes = registeredQuizzes.filter(q => q.status === 'live');
 
     return (
         <div className="join-quiz-page">
@@ -117,6 +156,57 @@ const JoinQuiz = () => {
                             )}
                         </button>
                     </form>
+
+                    {/* Registered Quizzes Section */}
+                    {!registeredLoading && (liveQuizzes.length > 0 || upcomingQuizzes.length > 0) && (
+                        <div className="registered-quizzes-section">
+                            <h3>📋 Your Registered Quizzes</h3>
+                            
+                            {/* Live Quizzes */}
+                            {liveQuizzes.length > 0 && (
+                                <div className="quiz-category">
+                                    <h4>🔴 Live Now</h4>
+                                    <div className="registered-quiz-list">
+                                        {liveQuizzes.map(quiz => (
+                                            <div key={quiz.id} className="registered-quiz-card live">
+                                                <div className="quiz-info">
+                                                    <span className="quiz-title">{quiz.title}</span>
+                                                    <span className="quiz-code">Code: {quiz.quizCode}</span>
+                                                </div>
+                                                <button
+                                                    className="btn btn-accent btn-small"
+                                                    onClick={() => handleJoinRegisteredQuiz(quiz)}
+                                                    disabled={joining}
+                                                >
+                                                    Join Now →
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Upcoming Quizzes */}
+                            {upcomingQuizzes.length > 0 && (
+                                <div className="quiz-category">
+                                    <h4>⏳ Upcoming</h4>
+                                    <div className="registered-quiz-list">
+                                        {upcomingQuizzes.map(quiz => (
+                                            <div key={quiz.id} className="registered-quiz-card upcoming">
+                                                <div className="quiz-info">
+                                                    <span className="quiz-title">{quiz.title}</span>
+                                                    <span className="quiz-code">Code: {quiz.quizCode}</span>
+                                                </div>
+                                                <span className="status-badge waiting">
+                                                    {quiz.status === 'draft' ? 'Not Started' : 'Waiting'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Info */}
                     <div className="join-info">

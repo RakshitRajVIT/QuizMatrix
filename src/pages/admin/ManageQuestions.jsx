@@ -14,7 +14,18 @@ const ManageQuestions = () => {
     const navigate = useNavigate();
     const { quiz, loading: quizLoading } = useQuizSubscription(quizId);
     const { questions, loading: questionsLoading } = useQuestionsSubscription(quizId);
-    const { addQuestion, updateQuestion, deleteQuestion, startQuiz, updateQuiz, shareQuiz, unshareQuiz } = useQuiz();
+    const { 
+        addQuestion, 
+        updateQuestion, 
+        deleteQuestion, 
+        startQuiz, 
+        updateQuiz, 
+        shareQuiz, 
+        unshareQuiz,
+        addAllowedParticipants,
+        removeAllowedParticipant,
+        toggleQuizRestriction
+    } = useQuiz();
 
     const [showForm, setShowForm] = useState(false);
     const [editingQuestion, setEditingQuestion] = useState(null);
@@ -34,6 +45,13 @@ const ManageQuestions = () => {
     // Share state
     const [shareEmail, setShareEmail] = useState('');
     const [sharingInProgress, setSharingInProgress] = useState(false);
+
+    // Allowed participants state
+    const [participantEmail, setParticipantEmail] = useState('');
+    const [bulkEmails, setBulkEmails] = useState('');
+    const [showBulkImport, setShowBulkImport] = useState(false);
+    const [participantLoading, setParticipantLoading] = useState(false);
+    const [participantSearch, setParticipantSearch] = useState('');
 
     // Sync newDuration with quiz when quiz loads
     useEffect(() => {
@@ -197,6 +215,87 @@ const ManageQuestions = () => {
         setSharingInProgress(false);
     };
 
+    // Allowed Participants Handlers
+    const handleAddParticipant = async () => {
+        const email = participantEmail.trim().toLowerCase();
+        if (!email) return;
+
+        // Basic email validation
+        if (!email.includes('@')) {
+            alert('Please enter a valid email address');
+            return;
+        }
+
+        setParticipantLoading(true);
+        try {
+            await addAllowedParticipants(quizId, [email]);
+            setParticipantEmail('');
+        } catch (error) {
+            console.error('Error adding participant:', error);
+            alert('Failed to add participant');
+        }
+        setParticipantLoading(false);
+    };
+
+    const handleBulkImport = async () => {
+        // Parse emails from bulk input (supports comma, newline, or semicolon separated)
+        const emails = bulkEmails
+            .split(/[,;\n]+/)
+            .map(e => e.trim().toLowerCase())
+            .filter(e => e && e.includes('@'));
+
+        if (emails.length === 0) {
+            alert('No valid email addresses found');
+            return;
+        }
+
+        setParticipantLoading(true);
+        try {
+            const added = await addAllowedParticipants(quizId, emails);
+            setBulkEmails('');
+            setShowBulkImport(false);
+            alert(`Successfully added ${added} new participant(s)`);
+        } catch (error) {
+            console.error('Error bulk importing participants:', error);
+            alert('Failed to import participants');
+        }
+        setParticipantLoading(false);
+    };
+
+    const handleRemoveParticipant = async (email) => {
+        if (!window.confirm(`Remove ${email} from allowed participants?`)) return;
+
+        setParticipantLoading(true);
+        try {
+            await removeAllowedParticipant(quizId, email);
+        } catch (error) {
+            console.error('Error removing participant:', error);
+            alert('Failed to remove participant');
+        }
+        setParticipantLoading(false);
+    };
+
+    const handleToggleRestriction = async () => {
+        const newRestricted = !quiz.isRestricted;
+        
+        if (newRestricted && (!quiz.allowedParticipants || quiz.allowedParticipants.length === 0)) {
+            alert('Please add at least one allowed participant before enabling restrictions');
+            return;
+        }
+
+        try {
+            await toggleQuizRestriction(quizId, newRestricted);
+        } catch (error) {
+            console.error('Error toggling restriction:', error);
+            alert('Failed to update quiz settings');
+        }
+    };
+
+    // Filter participants for search
+    const filteredParticipants = (quiz?.allowedParticipants || []).filter(email =>
+        email.toLowerCase().includes(participantSearch.toLowerCase())
+    );
+
     const timePresets = [15, 30, 45, 60, 90];
 
     if (quizLoading || questionsLoading) {
@@ -351,6 +450,145 @@ const ManageQuestions = () => {
                             <span className="hint">Only registered admins can be added</span>
                         </div>
                     </div>
+                </div>
+
+                {/* Allowed Participants Section */}
+                <div className="quiz-settings-card participants-card">
+                    <div className="setting-row">
+                        <div className="setting-label">
+                            <span className="setting-icon">🎫</span>
+                            <span>Allowed Participants</span>
+                            <span className={`restriction-badge ${quiz.isRestricted ? 'restricted' : 'open'}`}>
+                                {quiz.isRestricted ? '🔒 Restricted' : '🌐 Open to All'}
+                            </span>
+                        </div>
+                        <div className="restriction-toggle">
+                            <label className="toggle-switch">
+                                <input
+                                    type="checkbox"
+                                    checked={quiz.isRestricted || false}
+                                    onChange={handleToggleRestriction}
+                                />
+                                <span className="toggle-slider"></span>
+                            </label>
+                            <span className="toggle-label">
+                                {quiz.isRestricted ? 'Only registered emails can join' : 'Anyone with code can join'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {quiz.status === 'draft' && (
+                        <div className="participants-management">
+                            {/* Add Single Participant */}
+                            <div className="add-participant-row">
+                                <input
+                                    type="email"
+                                    placeholder="Participant email address"
+                                    value={participantEmail}
+                                    onChange={(e) => setParticipantEmail(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddParticipant()}
+                                />
+                                <button
+                                    className="btn btn-primary btn-small"
+                                    onClick={handleAddParticipant}
+                                    disabled={participantLoading || !participantEmail.trim()}
+                                >
+                                    {participantLoading ? '...' : '+ Add'}
+                                </button>
+                                <button
+                                    className="btn btn-secondary btn-small"
+                                    onClick={() => setShowBulkImport(!showBulkImport)}
+                                >
+                                    📋 Bulk Import
+                                </button>
+                            </div>
+
+                            {/* Bulk Import Section */}
+                            {showBulkImport && (
+                                <div className="bulk-import-section">
+                                    <p className="bulk-hint">
+                                        Paste emails from Google Forms/Sheets (comma, newline, or semicolon separated)
+                                    </p>
+                                    <textarea
+                                        placeholder="email1@gmail.com, email2@gmail.com&#10;email3@gmail.com"
+                                        value={bulkEmails}
+                                        onChange={(e) => setBulkEmails(e.target.value)}
+                                        rows={4}
+                                    />
+                                    <div className="bulk-actions">
+                                        <button
+                                            className="btn btn-ghost btn-small"
+                                            onClick={() => {
+                                                setBulkEmails('');
+                                                setShowBulkImport(false);
+                                            }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="btn btn-primary btn-small"
+                                            onClick={handleBulkImport}
+                                            disabled={participantLoading || !bulkEmails.trim()}
+                                        >
+                                            {participantLoading ? 'Importing...' : 'Import All'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Participants List */}
+                    {quiz.allowedParticipants && quiz.allowedParticipants.length > 0 && (
+                        <div className="participants-list-section">
+                            <div className="participants-header">
+                                <span className="participants-count">
+                                    {quiz.allowedParticipants.length} registered participant(s)
+                                </span>
+                                {quiz.allowedParticipants.length > 5 && (
+                                    <input
+                                        type="text"
+                                        placeholder="Search emails..."
+                                        value={participantSearch}
+                                        onChange={(e) => setParticipantSearch(e.target.value)}
+                                        className="search-input"
+                                    />
+                                )}
+                            </div>
+                            <div className="participants-list">
+                                {filteredParticipants.slice(0, 50).map(email => (
+                                    <div key={email} className="participant-chip">
+                                        <span>{email}</span>
+                                        {quiz.status === 'draft' && (
+                                            <button
+                                                className="btn-remove"
+                                                onClick={() => handleRemoveParticipant(email)}
+                                                title="Remove"
+                                            >
+                                                ×
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {filteredParticipants.length > 50 && (
+                                    <span className="more-hint">
+                                        +{filteredParticipants.length - 50} more...
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {(!quiz.allowedParticipants || quiz.allowedParticipants.length === 0) && (
+                        <div className="no-participants">
+                            <p>No participants registered yet.</p>
+                            <span className="hint">
+                                {quiz.isRestricted 
+                                    ? 'Add email addresses to allow specific participants to join this quiz.' 
+                                    : 'Currently anyone with the quiz code can join.'}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="questions-layout">

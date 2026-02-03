@@ -136,6 +136,73 @@ export const useQuiz = () => {
         }
     };
 
+    // ============================================================================
+    // ALLOWED PARTICIPANTS MANAGEMENT
+    // ============================================================================
+
+    // Add allowed participant email(s) to a quiz
+    const addAllowedParticipants = async (quizId, emails) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) throw new Error('Quiz not found');
+
+        const currentAllowed = quizSnap.data().allowedParticipants || [];
+        const normalizedEmails = emails.map(e => e.trim().toLowerCase()).filter(e => e);
+        
+        // Filter out duplicates
+        const newEmails = normalizedEmails.filter(e => !currentAllowed.includes(e));
+        
+        if (newEmails.length > 0) {
+            await updateDoc(quizRef, {
+                allowedParticipants: [...currentAllowed, ...newEmails],
+                isRestricted: true // Enable restriction when participants are added
+            });
+        }
+        
+        return newEmails.length;
+    };
+
+    // Remove allowed participant email from a quiz
+    const removeAllowedParticipant = async (quizId, email) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) throw new Error('Quiz not found');
+
+        const currentAllowed = quizSnap.data().allowedParticipants || [];
+        const updatedAllowed = currentAllowed.filter(e => e !== email.toLowerCase());
+        
+        await updateDoc(quizRef, {
+            allowedParticipants: updatedAllowed,
+            // If no participants left, disable restriction
+            isRestricted: updatedAllowed.length > 0
+        });
+    };
+
+    // Toggle quiz restriction (open to all vs restricted)
+    const toggleQuizRestriction = async (quizId, isRestricted) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        await updateDoc(quizRef, { isRestricted });
+    };
+
+    // Check if user is allowed to join a quiz
+    const isUserAllowedToJoin = async (quizId, userEmail) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) throw new Error('Quiz not found');
+
+        const quizData = quizSnap.data();
+        
+        // If quiz is not restricted, anyone can join
+        if (!quizData.isRestricted) return true;
+        
+        // Check if user's email is in allowed list
+        const allowedParticipants = quizData.allowedParticipants || [];
+        return allowedParticipants.includes(userEmail.toLowerCase());
+    };
+
     // Remove admin from shared list
     const unshareQuiz = async (quizId, adminEmail) => {
         const quizRef = doc(db, 'quizzes', quizId);
@@ -423,6 +490,12 @@ export const useQuiz = () => {
         shareQuiz,
         unshareQuiz,
 
+        // Allowed participants management
+        addAllowedParticipants,
+        removeAllowedParticipant,
+        toggleQuizRestriction,
+        isUserAllowedToJoin,
+
         // Participant operations
         joinQuiz,
         submitAnswer,
@@ -606,6 +679,54 @@ export const useParticipantsSubscription = (quizId) => {
     }, [quizId]);
 
     return { participants, loading };
+};
+
+// Hook to subscribe to quizzes where user is registered as allowed participant
+export const useRegisteredQuizzes = () => {
+    const [quizzes, setQuizzes] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const { user } = useAuth();
+
+    useEffect(() => {
+        if (!user?.email) {
+            setLoading(false);
+            return;
+        }
+
+        // Query for quizzes where user's email is in allowedParticipants
+        const registeredQuery = query(
+            collection(db, 'quizzes'),
+            where('allowedParticipants', 'array-contains', user.email.toLowerCase())
+        );
+
+        const unsubscribe = onSnapshot(
+            registeredQuery,
+            (snapshot) => {
+                const quizzesData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                // Sort by createdAt (newest first)
+                quizzesData.sort((a, b) => {
+                    const aTime = a.createdAt?.toDate?.() || new Date(0);
+                    const bTime = b.createdAt?.toDate?.() || new Date(0);
+                    return bTime - aTime;
+                });
+                setQuizzes(quizzesData);
+                setLoading(false);
+            },
+            (err) => {
+                console.error('Error fetching registered quizzes:', err);
+                setError(err.message);
+                setLoading(false);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [user?.email]);
+
+    return { quizzes, loading, error };
 };
 
 export default useQuiz;

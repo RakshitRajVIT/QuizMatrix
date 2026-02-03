@@ -2566,3 +2566,313 @@ img {
   outline: none;
   border-color: var(--text-primary);
 }
+
+/* ============================================================================
+   ALLOWED PARTICIPANTS STYLES
+   ============================================================================ */
+
+.participants-card {
+  margin-top: var(--space-lg);
+}
+
+.restriction-badge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  margin-left: var(--space-sm);
+}
+
+.restriction-badge.restricted {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-danger);
+}
+
+.restriction-badge.open {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--color-success);
+}
+
+.restriction-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  transition: 0.3s;
+  border-radius: var(--radius-full);
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-secondary);
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+  background-color: var(--bg-primary);
+}
+
+.toggle-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.participants-management {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.add-participant-row {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.add-participant-row input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.bulk-import-section {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.bulk-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.bulk-import-section textarea {
+  width: 100%;
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  resize: vertical;
+}
+
+.bulk-import-section textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.participants-list-section {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.participants-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.participants-count {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.search-input {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  width: 200px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.participants-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.participant-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--bg-tertiary);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--border-color);
+}
+
+.more-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  padding: var(--space-xs);
+}
+
+.no-participants {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-participants p {
+  margin-bottom: var(--space-xs);
+}
+
+/* ============================================================================
+   REGISTERED QUIZZES SECTION (Join Page)
+   ============================================================================ */
+
+.registered-quizzes-section {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-xl);
+  border-top: 1px solid var(--border-color);
+}
+
+.registered-quizzes-section h3 {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-lg);
+  color: var(--text-primary);
+}
+
+.quiz-category {
+  margin-bottom: var(--space-lg);
+}
+
+.quiz-category h4 {
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.registered-quiz-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.registered-quiz-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.registered-quiz-card.live {
+  border-color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.registered-quiz-card.upcoming {
+  opacity: 0.8;
+}
+
+.registered-quiz-card:hover {
+  background: var(--bg-card-hover);
+}
+
+.quiz-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.quiz-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quiz-code {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.status-badge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.status-badge.waiting {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--color-warning);
+}
+
+.status-badge.live {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-danger);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
