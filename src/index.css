@@ -2825,6 +2825,11 @@ img {
   background: rgba(239, 68, 68, 0.1);
 }
 
+.registered-quiz-card.waiting {
+  border-color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.1);
+}
+
 .registered-quiz-card.upcoming {
   opacity: 0.8;
 }
@@ -2860,6 +2865,11 @@ img {
 .status-badge.waiting {
   background: rgba(245, 158, 11, 0.2);
   color: var(--color-warning);
+}
+
+.status-badge.draft {
+  background: rgba(107, 114, 128, 0.2);
+  color: var(--text-muted);
 }
 
 .status-badge.live {

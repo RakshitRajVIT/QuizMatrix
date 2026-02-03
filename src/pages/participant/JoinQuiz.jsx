@@ -104,7 +104,8 @@ const JoinQuiz = () => {
     };
 
     // Filter quizzes by status
-    const upcomingQuizzes = registeredQuizzes.filter(q => q.status === 'draft' || q.status === 'waiting');
+    const upcomingQuizzes = registeredQuizzes.filter(q => q.status === 'draft'); // Only draft = not started
+    const waitingQuizzes = registeredQuizzes.filter(q => q.status === 'waiting'); // Waiting = can join lobby
     const liveQuizzes = registeredQuizzes.filter(q => q.status === 'live');
 
     return (
@@ -158,7 +159,7 @@ const JoinQuiz = () => {
                     </form>
 
                     {/* Registered Quizzes Section */}
-                    {!registeredLoading && (liveQuizzes.length > 0 || upcomingQuizzes.length > 0) && (
+                    {!registeredLoading && (liveQuizzes.length > 0 || waitingQuizzes.length > 0 || upcomingQuizzes.length > 0) && (
                         <div className="registered-quizzes-section">
                             <h3>📋 Your Registered Quizzes</h3>
                             
@@ -186,7 +187,31 @@ const JoinQuiz = () => {
                                 </div>
                             )}
 
-                            {/* Upcoming Quizzes */}
+                            {/* Waiting Quizzes - Can join lobby */}
+                            {waitingQuizzes.length > 0 && (
+                                <div className="quiz-category">
+                                    <h4>🟡 Open for Joining</h4>
+                                    <div className="registered-quiz-list">
+                                        {waitingQuizzes.map(quiz => (
+                                            <div key={quiz.id} className="registered-quiz-card waiting">
+                                                <div className="quiz-info">
+                                                    <span className="quiz-title">{quiz.title}</span>
+                                                    <span className="quiz-code">Code: {quiz.quizCode}</span>
+                                                </div>
+                                                <button
+                                                    className="btn btn-primary btn-small"
+                                                    onClick={() => handleJoinRegisteredQuiz(quiz)}
+                                                    disabled={joining}
+                                                >
+                                                    Join Lobby →
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Upcoming Quizzes - Draft, not yet open */}
                             {upcomingQuizzes.length > 0 && (
                                 <div className="quiz-category">
                                     <h4>⏳ Upcoming</h4>
@@ -197,8 +222,8 @@ const JoinQuiz = () => {
                                                     <span className="quiz-title">{quiz.title}</span>
                                                     <span className="quiz-code">Code: {quiz.quizCode}</span>
                                                 </div>
-                                                <span className="status-badge waiting">
-                                                    {quiz.status === 'draft' ? 'Not Started' : 'Waiting'}
+                                                <span className="status-badge draft">
+                                                    Not Started
                                                 </span>
                                             </div>
                                         ))}
