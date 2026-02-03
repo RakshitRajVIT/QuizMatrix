@@ -8,7 +8,7 @@ import {
     onAuthStateChanged
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, googleProvider, db, ADMIN_EMAILS } from '../firebase/firebase';
+import { auth, googleProvider, db, ADMIN_EMAILS, MASTER_ADMIN_EMAIL } from '../firebase/firebase';
 
 // Create the Auth Context
 const AuthContext = createContext();
@@ -26,11 +26,21 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
 
     // Check if email is in admin whitelist
     const checkAdminStatus = (email) => {
-        return ADMIN_EMAILS.includes(email?.toLowerCase());
+        if (!email) return false;
+        const normalizedEmail = email.toLowerCase();
+        return ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) ||
+            normalizedEmail === MASTER_ADMIN_EMAIL.toLowerCase();
+    };
+
+    // Check if email is master admin
+    const checkMasterAdminStatus = (email) => {
+        if (!email) return false;
+        return email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
     };
 
     // Save or update user in Firestore
@@ -39,6 +49,7 @@ export const AuthProvider = ({ children }) => {
         const userSnap = await getDoc(userRef);
 
         const isUserAdmin = checkAdminStatus(firebaseUser.email);
+        const isUserMasterAdmin = checkMasterAdminStatus(firebaseUser.email);
 
         const userData = {
             uid: firebaseUser.uid,
@@ -46,41 +57,41 @@ export const AuthProvider = ({ children }) => {
             displayName: firebaseUser.displayName,
             photoURL: firebaseUser.photoURL,
             isAdmin: isUserAdmin,
+            isMasterAdmin: isUserMasterAdmin,
             lastLogin: new Date().toISOString()
         };
 
         if (!userSnap.exists()) {
-            // New user - add createdAt
             userData.createdAt = new Date().toISOString();
         }
 
         await setDoc(userRef, userData, { merge: true });
-        return isUserAdmin;
+        return { isAdmin: isUserAdmin, isMasterAdmin: isUserMasterAdmin };
     };
 
     // Listen to auth state changes
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // User is signed in
                 try {
-                    const adminStatus = await saveUserToFirestore(firebaseUser);
+                    const { isAdmin: adminStatus, isMasterAdmin: masterStatus } = await saveUserToFirestore(firebaseUser);
                     setUser(firebaseUser);
                     setIsAdmin(adminStatus);
+                    setIsMasterAdmin(masterStatus);
                 } catch (error) {
                     console.error('Error saving user:', error);
                     setUser(firebaseUser);
                     setIsAdmin(checkAdminStatus(firebaseUser.email));
+                    setIsMasterAdmin(checkMasterAdminStatus(firebaseUser.email));
                 }
             } else {
-                // User is signed out
                 setUser(null);
                 setIsAdmin(false);
+                setIsMasterAdmin(false);
             }
             setLoading(false);
         });
 
-        // Cleanup subscription
         return () => unsubscribe();
     }, []);
 
@@ -109,6 +120,7 @@ export const AuthProvider = ({ children }) => {
     const value = {
         user,
         isAdmin,
+        isMasterAdmin,
         loading,
         signInWithGoogle,
         logout
@@ -122,3 +134,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export default AuthContext;
+

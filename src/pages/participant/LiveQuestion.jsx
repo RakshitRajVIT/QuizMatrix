@@ -1,7 +1,7 @@
 // Live Question Page - Main participant view during quiz
 // Shows question, timer, answer options, and handles submissions
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import Timer from '../../components/Timer';
@@ -17,20 +17,40 @@ const LiveQuestion = () => {
     const { quiz, loading: quizLoading } = useQuizSubscription(quizId);
     const { questions } = useQuestionsSubscription(quizId);
     const { participants } = useParticipantsSubscription(quizId);
-    const { submitAnswer, hasAnswered: checkHasAnswered, joinQuiz, nextQuestion } = useQuiz();
+    const { submitAnswer, hasAnswered: checkHasAnswered, joinQuiz } = useQuiz();
 
-    const [selectedAnswer, setSelectedAnswer] = useState(null);
-    const [hasAnswered, setHasAnswered] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
+    // Use refs to store values that shouldn't trigger re-renders
+    const selectedAnswerRef = useRef(null);
+    const hasAnsweredRef = useRef(false);
+    const submittingRef = useRef(false);
+
+    // Only these states should trigger re-renders
+    const [, forceUpdate] = useState(0);
     const [showResult, setShowResult] = useState(false);
     const [lastPoints, setLastPoints] = useState(0);
     const [wasCorrect, setWasCorrect] = useState(false);
     const [answerStartTime, setAnswerStartTime] = useState(null);
-    const [lastQuestionIndex, setLastQuestionIndex] = useState(-1);
-    const [movingToNext, setMovingToNext] = useState(false);
+    const [displayScore, setDisplayScore] = useState(0);
+    const [selectedAnswer, setSelectedAnswer] = useState(null);
+    const [hasAnswered, setHasAnswered] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
 
-    // Get current participant data
-    const currentParticipant = participants.find(p => p.oduid === user?.uid);
+    // Use ref to track current question to avoid re-renders
+    const currentQuestionIndexRef = useRef(-1);
+    const participantsRef = useRef(participants);
+
+    // Keep participants ref updated without causing re-renders
+    useEffect(() => {
+        participantsRef.current = participants;
+        // Update score from refs
+        const myParticipant = participants.find(p => p.oduid === user?.uid);
+        if (myParticipant?.score !== undefined && myParticipant.score !== displayScore) {
+            setDisplayScore(myParticipant.score);
+        }
+    }, [participants, user?.uid, displayScore]);
+
+    // Get current participant data using ref to avoid re-renders
+    const currentParticipant = participantsRef.current.find(p => p.oduid === user?.uid);
 
     // Join quiz if not already joined
     useEffect(() => {
@@ -41,19 +61,17 @@ const LiveQuestion = () => {
 
     // Check if already answered when question changes
     useEffect(() => {
-        // Only trigger when question index actually changes
-        if (quiz && quiz.currentQuestionIndex >= 0 && quiz.currentQuestionIndex !== lastQuestionIndex) {
-            const checkAnswered = async () => {
+        const checkAnswered = async () => {
+            if (quiz && quiz.currentQuestionIndex >= 0) {
                 const answered = await checkHasAnswered(quizId, quiz.currentQuestionIndex);
                 setHasAnswered(answered);
                 setSelectedAnswer(null);
                 setShowResult(false);
                 setAnswerStartTime(quiz.questionStartTime);
-                setLastQuestionIndex(quiz.currentQuestionIndex);
-            };
-            checkAnswered();
-        }
-    }, [quiz?.currentQuestionIndex, quizId, checkHasAnswered, lastQuestionIndex]);
+            }
+        };
+        checkAnswered();
+    }, [quiz?.currentQuestionIndex, quizId, checkHasAnswered, quiz?.questionStartTime]);
 
     // Handle time running out
     const handleTimeUp = useCallback(() => {
@@ -65,28 +83,61 @@ const LiveQuestion = () => {
         }
     }, [hasAnswered]);
 
-    // Handle moving to next question
-    const handleMoveToNextQuestion = async () => {
-        if (!questions || quiz.currentQuestionIndex >= questions.length - 1) return;
-
-        setMovingToNext(true);
-        try {
-            await nextQuestion(quizId, quiz.currentQuestionIndex, questions.length);
-            // Reset states for next question
-            setSelectedAnswer(null);
-            setHasAnswered(false);
-            setShowResult(false);
-        } catch (error) {
-            console.error('Error moving to next question:', error);
-            alert('Failed to move to next question');
-        }
-        setMovingToNext(false);
-    };
-
-    // Handle answer selection
-    const handleSelectAnswer = (optionIndex) => {
+    // Handle option click - double click to submit
+    const handleOptionClick = async (optionIndex) => {
         if (hasAnswered || submitting) return;
-        setSelectedAnswer(optionIndex);
+
+        // If clicking the same option again (double-click), submit
+        if (selectedAnswer === optionIndex) {
+            // Submit the answer
+            setSubmitting(true);
+
+            try {
+                const currentQuestion = questions[quiz.currentQuestionIndex];
+                if (!currentQuestion) {
+                    throw new Error('Question not found');
+                }
+
+                const isCorrect = optionIndex === currentQuestion.correctAnswer;
+
+                // Calculate time taken
+                let startTime;
+                if (answerStartTime?.toDate) {
+                    startTime = answerStartTime.toDate();
+                } else if (answerStartTime?.seconds) {
+                    startTime = new Date(answerStartTime.seconds * 1000);
+                } else if (answerStartTime) {
+                    startTime = new Date(answerStartTime);
+                } else {
+                    startTime = new Date();
+                }
+
+                const timeTaken = Math.max(0, (Date.now() - startTime.getTime()) / 1000);
+
+                const points = await submitAnswer(
+                    quizId,
+                    quiz.currentQuestionIndex,
+                    optionIndex,
+                    timeTaken,
+                    isCorrect,
+                    quiz.timePerQuestion
+                );
+
+                setHasAnswered(true);
+                setShowResult(true);
+                setWasCorrect(isCorrect);
+                setLastPoints(points);
+                setDisplayScore(prev => prev + points);
+            } catch (error) {
+                console.error('Error submitting answer:', error);
+                alert('Failed to submit answer: ' + error.message);
+            }
+
+            setSubmitting(false);
+        } else {
+            // First click - just select
+            setSelectedAnswer(optionIndex);
+        }
     };
 
     // Handle answer submission
@@ -123,7 +174,7 @@ const LiveQuestion = () => {
                 selectedAnswer,
                 timeTaken,
                 isCorrect,
-                quiz.totalTime
+                quiz.timePerQuestion
             );
 
             setHasAnswered(true);
@@ -196,7 +247,7 @@ const LiveQuestion = () => {
                         <p>The host will start the quiz shortly</p>
                         <div className="quiz-info">
                             <span><strong>{quiz.title}</strong></span>
-                            <span>{questions.length} questions · {Math.floor(quiz.totalTime / 60)}m total time</span>
+                            <span>{questions.length} questions · {quiz.timePerQuestion}s each</span>
                         </div>
                         <div className="participant-list">
                             <h4>Participants ({participants.length})</h4>
@@ -248,30 +299,31 @@ const LiveQuestion = () => {
                     </div>
                     <div className="score-display">
                         <span className="score-label">Score</span>
-                        <span className="score-value">{currentParticipant?.score || 0}</span>
+                        <span className="score-value">{displayScore}</span>
                     </div>
                 </div>
 
-                {/* Timer */}
+                {/* Timer - stops when answered */}
                 <Timer
-                    startTime={quiz.quizStartTime}
-                    duration={quiz.totalTime}
+                    startTime={quiz.questionStartTime}
+                    duration={quiz.timePerQuestion}
                     onTimeUp={handleTimeUp}
                     isActive={!hasAnswered}
                 />
+
+                {/* Answered indicator */}
+                {hasAnswered && !showResult && (
+                    <div className="answered-indicator">
+                        <span className="answered-icon">✓</span>
+                        <span>Answer Submitted!</span>
+                    </div>
+                )}
 
                 {/* Question Card */}
                 <div className={`question-card ${showResult ? 'show-result' : ''}`}>
                     <h2 className="question-text">{currentQuestion.text}</h2>
 
-                    {/* Question Image */}
-                    {currentQuestion.imageUrl && (
-                        <div className="question-image-display">
-                            <img src={currentQuestion.imageUrl} alt="Question" style={{ maxWidth: '100%', maxHeight: '300px', marginTop: '15px', borderRadius: '4px' }} />
-                        </div>
-                    )}
-
-                    {/* Answer Options */}
+                    {/* Answer Options - Click once to select, click again to submit */}
                     <div className="options-grid">
                         {currentQuestion.options.map((option, idx) => {
                             let optionClass = 'option-btn';
@@ -290,11 +342,14 @@ const LiveQuestion = () => {
                                 <button
                                     key={idx}
                                     className={optionClass}
-                                    onClick={() => handleSelectAnswer(idx)}
+                                    onClick={() => handleOptionClick(idx)}
                                     disabled={hasAnswered || submitting}
                                 >
                                     <span className="option-letter">{optionLabels[idx]}</span>
                                     <span className="option-text">{option}</span>
+                                    {selectedAnswer === idx && !hasAnswered && !submitting && (
+                                        <span className="click-again-hint">Click again to submit</span>
+                                    )}
                                 </button>
                             );
                         })}
@@ -319,35 +374,19 @@ const LiveQuestion = () => {
                         </div>
                     )}
 
-                    {/* Submit Button */}
-                    {!hasAnswered && (
-                        <button
-                            className="btn btn-primary btn-large submit-answer-btn"
-                            onClick={handleSubmit}
-                            disabled={selectedAnswer === null || submitting}
-                        >
-                            {submitting ? 'Submitting...' : 'Submit Answer'}
-                        </button>
+                    {/* Instruction for submitting */}
+                    {!hasAnswered && !submitting && selectedAnswer === null && (
+                        <p className="submit-hint">Click an option, then click it again to submit</p>
+                    )}
+
+                    {/* Submitting indicator */}
+                    {submitting && (
+                        <p className="submitting-text">Submitting...</p>
                     )}
 
                     {/* Waiting for next question */}
                     {hasAnswered && (
-                        <div className="answered-actions">
-                            {quiz.currentQuestionIndex < questions.length - 1 ? (
-                                <>
-                                    <p className="waiting-next">Answer submitted!</p>
-                                    <button
-                                        className="btn btn-primary btn-large"
-                                        onClick={handleMoveToNextQuestion}
-                                        disabled={movingToNext}
-                                    >
-                                        {movingToNext ? 'Loading...' : '➡️ Next Question'}
-                                    </button>
-                                </>
-                            ) : (
-                                <p className="waiting-next">Waiting for quiz to end...</p>
-                            )}
-                        </div>
+                        <p className="waiting-next">Waiting for next question...</p>
                     )}
                 </div>
             </main>

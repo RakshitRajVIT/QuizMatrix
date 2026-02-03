@@ -36,15 +36,117 @@ export const useQuiz = () => {
             ...quizData,
             quizCode,
             createdBy: user.uid,
+            creatorEmail: user.email,
+            sharedWith: [], // Array of admin emails who can manage this quiz
             status: 'draft',
             currentQuestionIndex: -1,
-            quizStartTime: null,
             questionStartTime: null,
             createdAt: serverTimestamp()
         };
 
         const docRef = await addDoc(collection(db, 'quizzes'), newQuiz);
         return { id: docRef.id, quizCode };
+    };
+
+    // Create quiz from JSON data
+    const createQuizFromJSON = async (jsonData) => {
+        // Validate JSON structure
+        if (!jsonData.title || typeof jsonData.title !== 'string') {
+            throw new Error('Invalid JSON: "title" is required and must be a string');
+        }
+        if (!jsonData.timePerQuestion || typeof jsonData.timePerQuestion !== 'number') {
+            throw new Error('Invalid JSON: "timePerQuestion" is required and must be a number');
+        }
+        if (!Array.isArray(jsonData.questions) || jsonData.questions.length === 0) {
+            throw new Error('Invalid JSON: "questions" must be a non-empty array');
+        }
+
+        // Validate each question
+        for (let i = 0; i < jsonData.questions.length; i++) {
+            const q = jsonData.questions[i];
+            if (!q.text || typeof q.text !== 'string') {
+                throw new Error(`Invalid question ${i + 1}: "text" is required`);
+            }
+            if (!Array.isArray(q.options) || q.options.length !== 4) {
+                throw new Error(`Invalid question ${i + 1}: "options" must be an array of 4 items`);
+            }
+            if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer > 3) {
+                throw new Error(`Invalid question ${i + 1}: "correctAnswer" must be 0, 1, 2, or 3`);
+            }
+        }
+
+        // Create the quiz
+        const quizCode = generateQuizCode();
+        const newQuiz = {
+            title: jsonData.title,
+            timePerQuestion: jsonData.timePerQuestion,
+            quizCode,
+            createdBy: user.uid,
+            creatorEmail: user.email,
+            sharedWith: [],
+            status: 'draft',
+            currentQuestionIndex: -1,
+            questionStartTime: null,
+            createdAt: serverTimestamp()
+        };
+
+        const quizRef = await addDoc(collection(db, 'quizzes'), newQuiz);
+        const quizId = quizRef.id;
+
+        // Add all questions (matching addQuestion structure)
+        const questionsRef = collection(db, 'quizzes', quizId, 'questions');
+        let addedCount = 0;
+
+        for (let i = 0; i < jsonData.questions.length; i++) {
+            const q = jsonData.questions[i];
+            try {
+                await addDoc(questionsRef, {
+                    text: q.text,
+                    options: q.options,
+                    correctAnswer: q.correctAnswer,
+                    index: i,
+                    createdAt: serverTimestamp()
+                });
+                addedCount++;
+            } catch (err) {
+                console.error(`Error adding question ${i + 1}:`, err);
+                throw new Error(`Failed to add question ${i + 1}: ${err.message}`);
+            }
+        }
+
+        // Update quiz with total questions count
+        const quizDocRef = doc(db, 'quizzes', quizId);
+        await updateDoc(quizDocRef, { totalQuestions: addedCount });
+
+        return { id: quizId, quizCode, questionCount: addedCount };
+    };
+
+    // Share quiz with another admin
+    const shareQuiz = async (quizId, adminEmail) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) throw new Error('Quiz not found');
+
+        const currentShared = quizSnap.data().sharedWith || [];
+        if (!currentShared.includes(adminEmail.toLowerCase())) {
+            await updateDoc(quizRef, {
+                sharedWith: [...currentShared, adminEmail.toLowerCase()]
+            });
+        }
+    };
+
+    // Remove admin from shared list
+    const unshareQuiz = async (quizId, adminEmail) => {
+        const quizRef = doc(db, 'quizzes', quizId);
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) throw new Error('Quiz not found');
+
+        const currentShared = quizSnap.data().sharedWith || [];
+        await updateDoc(quizRef, {
+            sharedWith: currentShared.filter(e => e !== adminEmail.toLowerCase())
+        });
     };
 
     // Update quiz details
@@ -152,8 +254,7 @@ export const useQuiz = () => {
     const startQuiz = async (quizId) => {
         await updateQuiz(quizId, {
             status: 'waiting',
-            currentQuestionIndex: -1,
-            quizStartTime: null
+            currentQuestionIndex: -1
         });
     };
 
@@ -170,18 +271,12 @@ export const useQuiz = () => {
             return false;
         }
 
-        const updateData = {
+        await updateQuiz(quizId, {
             status: 'live',
             currentQuestionIndex: nextIndex,
             questionStartTime: serverTimestamp()
-        };
+        });
 
-        // Set quiz start time only on first question
-        if (nextIndex === 0) {
-            updateData.quizStartTime = serverTimestamp();
-        }
-
-        await updateQuiz(quizId, updateData);
         return true;
     };
 
@@ -192,29 +287,24 @@ export const useQuiz = () => {
         });
     };
 
-    // Restart the quiz - reset to waiting state and clear all scores
+    // Restart the quiz - reset to waiting state and clear all data
     const restartQuiz = async (quizId) => {
-        // Reset quiz to waiting state
-        await updateQuiz(quizId, {
-            status: 'waiting',
-            currentQuestionIndex: -1,
-            questionStartTime: null
-        });
+        try {
+            // Reset quiz to waiting state
+            await updateQuiz(quizId, {
+                status: 'waiting',
+                currentQuestionIndex: -1,
+                questionStartTime: null
+            });
 
-        // Reset all participant scores and answered questions
-        const participantsRef = collection(db, 'quizzes', quizId, 'participants');
-        const participantsSnap = await getDocs(participantsRef);
+            // Delete all participants (they need to rejoin)
+            await deleteSubcollection(quizId, 'participants');
 
-        const resetPromises = participantsSnap.docs.map(participantDoc =>
-            updateDoc(participantDoc.ref, {
-                score: 0,
-                answeredQuestions: []
-            })
-        );
-        await Promise.all(resetPromises);
-
-        // Delete all responses
-        await deleteSubcollection(quizId, 'responses');
+            // Delete all responses
+            await deleteSubcollection(quizId, 'responses');
+        } catch (error) {
+            throw error;
+        }
     };
 
     // ============================================================================
@@ -246,33 +336,56 @@ export const useQuiz = () => {
     };
 
     // Submit an answer
-    const submitAnswer = async (quizId, questionIndex, selectedAnswer, timeTaken, isCorrect, totalQuizTime) => {
-        // Add response document
-        const responsesRef = collection(db, 'quizzes', quizId, 'responses');
-        await addDoc(responsesRef, {
-            odquestionIndex: questionIndex,
-            oduserId: user.uid,
-            odselectedAnswer: selectedAnswer,
-            odisCorrect: isCorrect,
-            odtimeTaken: timeTaken,
-            odsubmittedAt: serverTimestamp()
-        });
+    const submitAnswer = async (quizId, questionIndex, selectedAnswer, timeTaken, isCorrect, maxTime) => {
+        try {
+            // Calculate points first
+            const points = calculateScore(isCorrect, timeTaken, maxTime);
 
-        // Calculate and update score
-        const points = calculateScore(isCorrect, timeTaken, totalQuizTime);
+            // Ensure participant exists (create if not)
+            const participantRef = doc(db, 'quizzes', quizId, 'participants', user.uid);
+            const participantSnap = await getDoc(participantRef);
 
-        const participantRef = doc(db, 'quizzes', quizId, 'participants', user.uid);
-        const participantSnap = await getDoc(participantRef);
+            if (!participantSnap.exists()) {
+                // Create participant if not exists
+                await setDoc(participantRef, {
+                    oduid: user.uid,
+                    displayName: user.displayName || 'Anonymous',
+                    email: user.email || '',
+                    photoURL: user.photoURL || '',
+                    score: 0,
+                    answeredQuestions: [],
+                    joinedAt: serverTimestamp()
+                });
+            }
 
-        if (participantSnap.exists()) {
-            const currentData = participantSnap.data();
-            await updateDoc(participantRef, {
-                score: (currentData.score || 0) + points,
-                answeredQuestions: [...(currentData.answeredQuestions || []), questionIndex]
+            // Add response document
+            const responsesRef = collection(db, 'quizzes', quizId, 'responses');
+            await addDoc(responsesRef, {
+                odquestionIndex: questionIndex,
+                oduserId: user.uid,
+                odselectedAnswer: selectedAnswer,
+                odisCorrect: isCorrect,
+                odtimeTaken: timeTaken,
+                odsubmittedAt: serverTimestamp()
             });
-        }
 
-        return points;
+            // Update participant score
+            const currentSnap = await getDoc(participantRef);
+            if (currentSnap.exists()) {
+                const currentData = currentSnap.data();
+                const newScore = (currentData.score || 0) + points;
+                const newAnswered = [...(currentData.answeredQuestions || []), questionIndex];
+
+                await updateDoc(participantRef, {
+                    score: newScore,
+                    answeredQuestions: newAnswered
+                });
+            }
+
+            return points;
+        } catch (error) {
+            throw error;
+        }
     };
 
     // Check if user already answered a question
@@ -289,6 +402,7 @@ export const useQuiz = () => {
     return {
         // Quiz operations
         createQuiz,
+        createQuizFromJSON,
         updateQuiz,
         deleteQuiz,
         getQuizByCode,
@@ -305,6 +419,10 @@ export const useQuiz = () => {
         endQuiz,
         restartQuiz,
 
+        // Sharing
+        shareQuiz,
+        unshareQuiz,
+
         // Participant operations
         joinQuiz,
         submitAnswer,
@@ -316,7 +434,7 @@ export const useQuiz = () => {
 // REAL-TIME SUBSCRIPTION HOOKS
 // ============================================================================
 
-// Hook to subscribe to admin's quizzes
+// Hook to subscribe to admin's quizzes (owned + shared)
 export const useAdminQuizzes = () => {
     const [quizzes, setQuizzes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -329,37 +447,82 @@ export const useAdminQuizzes = () => {
             return;
         }
 
-        // Simple query without orderBy to avoid composite index requirement
-        const q = query(
+        // Query for owned quizzes
+        const ownedQuery = query(
             collection(db, 'quizzes'),
             where('createdBy', '==', user.uid)
         );
 
-        const unsubscribe = onSnapshot(
-            q,
-            (snapshot) => {
-                const quizzesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                // Sort client-side by createdAt (newest first)
-                quizzesData.sort((a, b) => {
+        // Query for shared quizzes (where user's email is in sharedWith array)
+        const sharedQuery = query(
+            collection(db, 'quizzes'),
+            where('sharedWith', 'array-contains', user.email?.toLowerCase())
+        );
+
+        let ownedQuizzes = [];
+        let sharedQuizzes = [];
+        let ownedLoaded = false;
+        let sharedLoaded = false;
+
+        const mergeQuizzes = () => {
+            if (ownedLoaded && sharedLoaded) {
+                // Merge and deduplicate
+                const allQuizzes = [...ownedQuizzes];
+                sharedQuizzes.forEach(sq => {
+                    if (!allQuizzes.find(q => q.id === sq.id)) {
+                        allQuizzes.push({ ...sq, isShared: true });
+                    }
+                });
+                // Sort by createdAt
+                allQuizzes.sort((a, b) => {
                     const aTime = a.createdAt?.toDate?.() || new Date(0);
                     const bTime = b.createdAt?.toDate?.() || new Date(0);
                     return bTime - aTime;
                 });
-                setQuizzes(quizzesData);
+                setQuizzes(allQuizzes);
                 setLoading(false);
-                setError(null);
+            }
+        };
+
+        const unsubOwned = onSnapshot(
+            ownedQuery,
+            (snapshot) => {
+                ownedQuizzes = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    isOwned: true
+                }));
+                ownedLoaded = true;
+                mergeQuizzes();
             },
             (err) => {
-                console.error('Error fetching quizzes:', err);
+                console.error('Error fetching owned quizzes:', err);
                 setError(err.message);
                 setLoading(false);
             }
         );
 
-        return () => unsubscribe();
+        const unsubShared = onSnapshot(
+            sharedQuery,
+            (snapshot) => {
+                sharedQuizzes = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                sharedLoaded = true;
+                mergeQuizzes();
+            },
+            (err) => {
+                // Ignore errors for shared query (may fail if no index)
+                sharedLoaded = true;
+                mergeQuizzes();
+            }
+        );
+
+        return () => {
+            unsubOwned();
+            unsubShared();
+        };
     }, [user]);
 
     return { quizzes, loading, error };

@@ -1,11 +1,13 @@
-// Header - Top navigation bar with Matrix Club branding
+// Header - Top navigation bar with dynamic club branding
 // Shows user info and logout button when authenticated
 
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { useSettings } from '../hooks/useSettings';
 
 const Header = () => {
-    const { user, isAdmin, logout } = useAuth();
+    const { user, isAdmin, isMasterAdmin, logout } = useAuth();
+    const { clubName, logoUrl } = useSettings();
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -23,10 +25,10 @@ const Header = () => {
                 {/* Logo and Brand */}
                 <Link to={isAdmin ? '/admin' : '/join'} className="brand">
                     <div className="logo">
-                        <img src="/favicon.ico" alt="Matrix Club Logo" className="logo-image" />
+                        <img src={logoUrl} alt="Logo" className="logo-img" />
                     </div>
                     <div className="brand-text">
-                        <h1>Matrix Club</h1>
+                        <h1>{clubName}</h1>
                         <span className="tagline">Live Quiz Platform</span>
                     </div>
                 </Link>
@@ -46,10 +48,15 @@ const Header = () => {
                             <div className="user-details">
                                 <span className="user-name">{user.displayName}</span>
                                 <span className={`user-role ${isAdmin ? 'admin' : 'participant'}`}>
-                                    {isAdmin ? '🛡️ Admin' : '👤 Participant'}
+                                    {isMasterAdmin ? '👑 Master Admin' : isAdmin ? '🛡️ Admin' : '👤 Participant'}
                                 </span>
                             </div>
                         </div>
+                        {isMasterAdmin && (
+                            <button onClick={() => navigate('/admin/settings')} className="btn btn-ghost">
+                                ⚙️
+                            </button>
+                        )}
                         <button onClick={handleLogout} className="btn btn-outline logout-btn">
                             Logout
                         </button>
@@ -61,3 +68,4 @@ const Header = () => {
 };
 
 export default Header;
+

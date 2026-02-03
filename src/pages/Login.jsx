@@ -1,12 +1,14 @@
-// Login Page - Google Sign-In with Matrix Club branding
+// Login Page - Google Sign-In with dynamic club branding
 // Redirects admin to dashboard, participants to join page
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../hooks/useSettings';
 
 const Login = () => {
     const { signInWithGoogle, user, isAdmin, loading } = useAuth();
+    const { clubName, logoUrl } = useSettings();
     const navigate = useNavigate();
     const [error, setError] = useState('');
     const [signingIn, setSigningIn] = useState(false);
@@ -24,7 +26,6 @@ const Login = () => {
 
         try {
             await signInWithGoogle();
-            // Navigation will happen automatically via useEffect
         } catch (err) {
             console.error('Sign in error:', err);
             setError('Failed to sign in. Please try again.');
@@ -46,17 +47,14 @@ const Login = () => {
         );
     }
 
-    // Don't render login if user is already authenticated
     if (user) {
         return null;
     }
 
     return (
         <div className="login-page">
-            {/* Animated Background */}
             <div className="login-bg"></div>
 
-            {/* Floating Elements for Visual Appeal */}
             <div className="floating-shapes">
                 <div className="shape shape-1">◇</div>
                 <div className="shape shape-2">◆</div>
@@ -64,14 +62,12 @@ const Login = () => {
             </div>
 
             <div className="login-container">
-                {/* Login Card */}
                 <div className="login-card">
-                    {/* Logo and Branding */}
                     <div className="login-header">
                         <div className="logo-large">
-                            <span className="logo-diamond">◆</span>
+                            <img src={logoUrl} alt="Logo" className="login-logo-img" />
                         </div>
-                        <h1 className="brand-title">Matrix Club</h1>
+                        <h1 className="brand-title">{clubName}</h1>
                         <p className="brand-subtitle">Live Quiz Platform</p>
                     </div>
 
@@ -116,6 +112,12 @@ const Login = () => {
                     <div className="login-footer">
                         <p>👨‍🏫 <strong>Admins:</strong> Create and host live quizzes</p>
                         <p>🎓 <strong>Students:</strong> Join and participate in quizzes</p>
+                    </div>
+
+                    {/* Developer Credit */}
+                    <div className="developer-credit">
+                        <p>Developed by <a href="https://www.linkedin.com/in/deepak-shukla-27a60628a/" target="_blank" rel="noopener noreferrer"><strong>Deepak Shukla</strong></a></p>
+                        <p>&amp; The Matrix Club Technical Team</p>
                     </div>
                 </div>
             </div>

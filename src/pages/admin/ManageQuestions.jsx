@@ -1,49 +1,52 @@
 // Manage Questions Page - Add, edit, and delete quiz questions
 // Each question has text, 4 options, and correct answer selection
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useQuiz, useQuizSubscription, useQuestionsSubscription } from '../../hooks/useQuiz';
 import { validateQuestionData } from '../../utils/helpers';
+import { ADMIN_EMAILS } from '../../firebase/firebase';
 
 const ManageQuestions = () => {
     const { quizId } = useParams();
     const navigate = useNavigate();
     const { quiz, loading: quizLoading } = useQuizSubscription(quizId);
     const { questions, loading: questionsLoading } = useQuestionsSubscription(quizId);
-    const { addQuestion, updateQuestion, deleteQuestion, startQuiz } = useQuiz();
+    const { addQuestion, updateQuestion, deleteQuestion, startQuiz, updateQuiz, shareQuiz, unshareQuiz } = useQuiz();
 
     const [showForm, setShowForm] = useState(false);
     const [editingQuestion, setEditingQuestion] = useState(null);
     const [formData, setFormData] = useState({
         text: '',
-        imageUrl: '',
         options: ['', '', '', ''],
         correctAnswer: -1
     });
     const [errors, setErrors] = useState([]);
     const [saving, setSaving] = useState(false);
 
-    const resetForm = useCallback(() => {
-        setFormData({
-            text: '',
-            imageUrl: '',
-            options: ['', '', '', ''],
-            correctAnswer: -1
-        });
-        setErrors([]);
-        setShowForm(false);
-        setEditingQuestion(null);
-    }, []);
+    // Duration editor state
+    const [editingDuration, setEditingDuration] = useState(false);
+    const [newDuration, setNewDuration] = useState(30);
+    const [savingDuration, setSavingDuration] = useState(false);
+
+    // Share state
+    const [shareEmail, setShareEmail] = useState('');
+    const [sharingInProgress, setSharingInProgress] = useState(false);
+
+    // Sync newDuration with quiz when quiz loads
+    useEffect(() => {
+        if (quiz?.timePerQuestion) {
+            setNewDuration(quiz.timePerQuestion);
+        }
+    }, [quiz?.timePerQuestion]);
 
     // Reset form when editing question changes
     useEffect(() => {
         if (editingQuestion) {
             setFormData({
                 text: editingQuestion.text,
-                imageUrl: editingQuestion.imageUrl || '',
                 options: [...editingQuestion.options],
                 correctAnswer: editingQuestion.correctAnswer
             });
@@ -51,15 +54,21 @@ const ManageQuestions = () => {
         } else {
             resetForm();
         }
-    }, [editingQuestion, resetForm]);
+    }, [editingQuestion]);
+
+    const resetForm = () => {
+        setFormData({
+            text: '',
+            options: ['', '', '', ''],
+            correctAnswer: -1
+        });
+        setErrors([]);
+        setShowForm(false);
+        setEditingQuestion(null);
+    };
 
     const handleTextChange = (e) => {
         setFormData(prev => ({ ...prev, text: e.target.value }));
-        setErrors([]);
-    };
-
-    const handleImageChange = (e) => {
-        setFormData(prev => ({ ...prev, imageUrl: e.target.value }));
         setErrors([]);
     };
 
@@ -129,6 +138,67 @@ const ManageQuestions = () => {
         }
     };
 
+    // Duration editor handlers
+    const handleSaveDuration = async () => {
+        if (newDuration < 5 || newDuration > 120) {
+            alert('Duration must be between 5 and 120 seconds');
+            return;
+        }
+
+        setSavingDuration(true);
+        try {
+            await updateQuiz(quizId, { timePerQuestion: newDuration });
+            setEditingDuration(false);
+        } catch (error) {
+            console.error('Error updating duration:', error);
+            alert('Failed to update duration');
+        }
+        setSavingDuration(false);
+    };
+
+    // Share handlers
+    const handleShareQuiz = async () => {
+        const email = shareEmail.trim().toLowerCase();
+        if (!email) return;
+
+        // Check if it's a valid admin email
+        if (!ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email)) {
+            alert('This email is not registered as an admin');
+            return;
+        }
+
+        // Can't share with yourself
+        if (email === quiz.creatorEmail?.toLowerCase()) {
+            alert('Cannot share with quiz creator');
+            return;
+        }
+
+        setSharingInProgress(true);
+        try {
+            await shareQuiz(quizId, email);
+            setShareEmail('');
+        } catch (error) {
+            console.error('Error sharing quiz:', error);
+            alert('Failed to share quiz');
+        }
+        setSharingInProgress(false);
+    };
+
+    const handleUnshareQuiz = async (email) => {
+        if (!window.confirm(`Remove ${email} from shared admins?`)) return;
+
+        setSharingInProgress(true);
+        try {
+            await unshareQuiz(quizId, email);
+        } catch (error) {
+            console.error('Error removing share:', error);
+            alert('Failed to remove admin');
+        }
+        setSharingInProgress(false);
+    };
+
+    const timePresets = [15, 30, 45, 60, 90];
+
     if (quizLoading || questionsLoading) {
         return <LoadingSpinner message="Loading questions..." />;
     }
@@ -175,6 +245,114 @@ const ManageQuestions = () => {
                     </div>
                 </div>
 
+                {/* Quiz Settings - Duration Editor */}
+                <div className="quiz-settings-card">
+                    <div className="setting-row">
+                        <div className="setting-label">
+                            <span className="setting-icon">⏱️</span>
+                            <span>Time per Question</span>
+                        </div>
+                        {!editingDuration ? (
+                            <div className="setting-value">
+                                <strong>{quiz.timePerQuestion}s</strong>
+                                {quiz.status === 'draft' && (
+                                    <button
+                                        className="btn btn-ghost btn-small"
+                                        onClick={() => setEditingDuration(true)}
+                                    >
+                                        ✏️ Edit
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="setting-editor">
+                                <div className="time-presets">
+                                    {timePresets.map(time => (
+                                        <button
+                                            key={time}
+                                            className={`preset-btn ${newDuration === time ? 'active' : ''}`}
+                                            onClick={() => setNewDuration(time)}
+                                        >
+                                            {time}s
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="custom-time">
+                                    <input
+                                        type="number"
+                                        min="5"
+                                        max="120"
+                                        value={newDuration}
+                                        onChange={(e) => setNewDuration(parseInt(e.target.value) || 5)}
+                                    />
+                                    <span>seconds</span>
+                                </div>
+                                <div className="setting-actions">
+                                    <button
+                                        className="btn btn-ghost btn-small"
+                                        onClick={() => {
+                                            setNewDuration(quiz.timePerQuestion);
+                                            setEditingDuration(false);
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary btn-small"
+                                        onClick={handleSaveDuration}
+                                        disabled={savingDuration}
+                                    >
+                                        {savingDuration ? 'Saving...' : 'Save'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Share Setting */}
+                    <div className="setting-row" style={{ marginTop: 'var(--space-lg)', borderTop: '1px solid var(--border-color)', paddingTop: 'var(--space-lg)' }}>
+                        <div className="setting-label">
+                            <span className="setting-icon">👥</span>
+                            <span>Share with Admins</span>
+                        </div>
+                        <div className="share-section">
+                            <div className="share-input-row">
+                                <input
+                                    type="email"
+                                    placeholder="Admin email address"
+                                    value={shareEmail}
+                                    onChange={(e) => setShareEmail(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleShareQuiz()}
+                                />
+                                <button
+                                    className="btn btn-primary btn-small"
+                                    onClick={handleShareQuiz}
+                                    disabled={sharingInProgress || !shareEmail.trim()}
+                                >
+                                    {sharingInProgress ? '...' : '+ Share'}
+                                </button>
+                            </div>
+                            {quiz.sharedWith && quiz.sharedWith.length > 0 && (
+                                <div className="shared-list">
+                                    {quiz.sharedWith.map(email => (
+                                        <div key={email} className="shared-chip">
+                                            <span>{email}</span>
+                                            <button
+                                                className="btn-remove"
+                                                onClick={() => handleUnshareQuiz(email)}
+                                                title="Remove"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <span className="hint">Only registered admins can be added</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="questions-layout">
                     {/* Questions List */}
                     <div className="questions-list">
@@ -201,11 +379,6 @@ const ManageQuestions = () => {
                                         <div className="question-number">Q{idx + 1}</div>
                                         <div className="question-content">
                                             <p className="question-text">{question.text}</p>
-                                            {question.imageUrl && (
-                                                <div className="question-image-preview">
-                                                    <img src={question.imageUrl} alt="Question" style={{ maxWidth: '100%', maxHeight: '150px', marginTop: '8px', borderRadius: '4px' }} />
-                                                </div>
-                                            )}
                                             <div className="options-preview">
                                                 {question.options.map((opt, optIdx) => (
                                                     <span
@@ -272,23 +445,6 @@ const ManageQuestions = () => {
                                         rows={3}
                                         autoFocus
                                     />
-                                </div>
-
-                                {/* Question Image */}
-                                <div className="form-group">
-                                    <label>Question Image (Optional)</label>
-                                    <input
-                                        type="text"
-                                        value={formData.imageUrl}
-                                        onChange={handleImageChange}
-                                        placeholder="Paste image URL here (e.g., https://example.com/image.jpg)"
-                                    />
-                                    {formData.imageUrl && (
-                                        <div className="image-preview">
-                                            <img src={formData.imageUrl} alt="Question preview" style={{ maxWidth: '100%', maxHeight: '200px', marginTop: '10px', borderRadius: '4px' }} />
-                                        </div>
-                                    )}
-                                    <span className="hint">Add an image to your question by pasting a direct image URL</span>
                                 </div>
 
                                 {/* Options */}

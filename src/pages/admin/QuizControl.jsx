@@ -1,12 +1,14 @@
 // Quiz Control Page - Admin control panel during live quiz
 // Shows current question, controls, and real-time participant count
 
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import Leaderboard from '../../components/Leaderboard';
+import Timer from '../../components/Timer';
 import { useQuiz, useQuizSubscription, useQuestionsSubscription, useParticipantsSubscription } from '../../hooks/useQuiz';
+
 
 const QuizControl = () => {
     const { quizId } = useParams();
@@ -17,20 +19,35 @@ const QuizControl = () => {
     const { nextQuestion, endQuiz, restartQuiz } = useQuiz();
 
     const [transitioning, setTransitioning] = useState(false);
+    const autoAdvanceRef = useRef(false); // Prevent multiple auto-advances
+    const lastQuestionIndexRef = useRef(-1);
+
+    // Reset auto-advance flag when question changes
+    useEffect(() => {
+        if (quiz?.currentQuestionIndex !== lastQuestionIndexRef.current) {
+            autoAdvanceRef.current = false;
+            lastQuestionIndexRef.current = quiz?.currentQuestionIndex ?? -1;
+        }
+    }, [quiz?.currentQuestionIndex]);
 
     const handleNextQuestion = async () => {
+        if (transitioning) return;
         setTransitioning(true);
         try {
-            const hasMore = await nextQuestion(quizId, quiz.currentQuestionIndex, questions.length);
-            if (!hasMore) {
-                // Quiz ended - stay on control page to see results
-            }
+            await nextQuestion(quizId, quiz.currentQuestionIndex, questions.length);
         } catch (error) {
             console.error('Error moving to next question:', error);
             alert('Failed to move to next question');
         }
         setTransitioning(false);
     };
+
+    // Auto-advance when timer ends
+    const handleAutoNext = useCallback(() => {
+        if (autoAdvanceRef.current || transitioning) return;
+        autoAdvanceRef.current = true;
+        handleNextQuestion();
+    }, [quizId, quiz?.currentQuestionIndex, questions?.length, transitioning]);
 
     const handleEndQuiz = async () => {
         if (!window.confirm('Are you sure you want to end the quiz now?')) return;
@@ -133,6 +150,14 @@ const QuizControl = () => {
                                 <div className="question-progress">
                                     Question {quiz.currentQuestionIndex + 1} of {questions.length}
                                 </div>
+
+                                {/* Timer for admin - auto-advances when time is up */}
+                                <Timer
+                                    startTime={quiz.questionStartTime}
+                                    duration={quiz.timePerQuestion}
+                                    isActive={true}
+                                    onTimeUp={handleAutoNext}
+                                />
 
                                 <div className="current-question-card">
                                     <h2 className="question-text">{currentQuestion.text}</h2>

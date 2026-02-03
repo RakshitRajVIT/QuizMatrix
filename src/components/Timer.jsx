@@ -1,55 +1,66 @@
 // Timer - Countdown timer component synced with server timestamp
 // Displays remaining time and triggers callback when time is up
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 
-const Timer = ({
-    startTime,           // Server timestamp when quiz started
-    duration,            // Total quiz duration in seconds
+const Timer = memo(({
+    startTime,           // Server timestamp when question started
+    duration,            // Duration in seconds
     onTimeUp,           // Callback when time runs out
     isActive = true     // Whether timer should be running
 }) => {
     const [timeLeft, setTimeLeft] = useState(duration);
-    const [hasEnded, setHasEnded] = useState(false);
+    const hasEndedRef = useRef(false);
+    const onTimeUpRef = useRef(onTimeUp);
+
+    // Keep ref updated
+    useEffect(() => {
+        onTimeUpRef.current = onTimeUp;
+    }, [onTimeUp]);
+
+    // Reset when startTime changes (new question)
+    useEffect(() => {
+        hasEndedRef.current = false;
+        setTimeLeft(duration);
+    }, [startTime, duration]);
 
     useEffect(() => {
-        if (!isActive || hasEnded) return;
+        if (!isActive || hasEndedRef.current) return;
 
-        // Calculate remaining time based on quiz start time
+        // Calculate time left based on server timestamp
         const calculateTimeLeft = () => {
             if (!startTime) return duration;
 
             const now = Date.now();
-            const start = startTime.toDate ? startTime.toDate().getTime() : startTime;
+            let start;
+            if (startTime.toDate) {
+                start = startTime.toDate().getTime();
+            } else if (startTime.seconds) {
+                start = startTime.seconds * 1000;
+            } else {
+                start = new Date(startTime).getTime();
+            }
             const elapsed = Math.floor((now - start) / 1000);
-            const remaining = Math.max(0, duration - elapsed);
-
-            return remaining;
+            return Math.max(0, duration - elapsed);
         };
 
         // Set initial time
         setTimeLeft(calculateTimeLeft());
 
-        // Update every 100ms for smooth countdown
+        // Update every second (not 100ms to reduce re-renders)
         const interval = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
 
-            if (remaining <= 0 && !hasEnded) {
-                setHasEnded(true);
+            if (remaining <= 0 && !hasEndedRef.current) {
+                hasEndedRef.current = true;
                 clearInterval(interval);
-                if (onTimeUp) onTimeUp();
+                if (onTimeUpRef.current) onTimeUpRef.current();
             }
-        }, 100);
+        }, 1000);
 
         return () => clearInterval(interval);
-    }, [startTime, duration, isActive, onTimeUp, hasEnded]);
-
-    // Reset when startTime changes
-    useEffect(() => {
-        setHasEnded(false);
-        setTimeLeft(duration);
-    }, [startTime, duration]);
+    }, [startTime, duration, isActive]);
 
     // Calculate percentage for progress bar
     const percentage = (timeLeft / duration) * 100;
@@ -61,20 +72,13 @@ const Timer = ({
         return 'timer-red';
     };
 
-    // Format time as MM:SS
-    const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
     return (
         <div className="timer-container">
             <div className="timer-display">
                 <span className={`timer-text ${getTimerColor()}`}>
-                    {formatTime(timeLeft)}
+                    {timeLeft}
                 </span>
-                <span className="timer-label">remaining</span>
+                <span className="timer-label">seconds</span>
             </div>
             <div className="timer-bar-container">
                 <div
@@ -84,6 +88,9 @@ const Timer = ({
             </div>
         </div>
     );
-};
+});
+
+Timer.displayName = 'Timer';
 
 export default Timer;
+

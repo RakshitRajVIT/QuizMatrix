@@ -12,6 +12,7 @@ import CreateQuiz from './pages/admin/CreateQuiz';
 import ManageQuestions from './pages/admin/ManageQuestions';
 import QuizControl from './pages/admin/QuizControl';
 import AdminLeaderboard from './pages/admin/AdminLeaderboard';
+import MasterSettings from './pages/admin/MasterSettings';
 import JoinQuiz from './pages/participant/JoinQuiz';
 import LiveQuestion from './pages/participant/LiveQuestion';
 
@@ -40,6 +41,11 @@ function App() {
             <Route path="/admin" element={
               <ProtectedRoute adminOnly>
                 <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/settings" element={
+              <ProtectedRoute adminOnly>
+                <MasterSettings />
               </ProtectedRoute>
             } />
             <Route path="/admin/create" element={

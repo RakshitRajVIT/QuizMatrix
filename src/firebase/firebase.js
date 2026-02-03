@@ -4,7 +4,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, serverTimestamp } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 // =============================================================================
 // FIREBASE CONFIGURATION
@@ -21,15 +20,22 @@ const firebaseConfig = {
 };
 
 // =============================================================================
-// ADMIN EMAIL WHITELIST
-// Add Gmail addresses that should have admin (host) access
+// MASTER ADMIN - Can manage admins and club settings
+// =============================================================================
+export const MASTER_ADMIN_EMAIL = "deepakshukla1508.i@gmail.com";
+
+// =============================================================================
+// DEFAULT ADMIN EMAIL WHITELIST (fallback if Firestore not loaded)
 // =============================================================================
 export const ADMIN_EMAILS = [
   "dipakshukla158@gmail.com",
-  "rakshitraj2323@gmail.com"
-  // Add more admin emails here
-  // "matrixclub@gmail.com",
+  "bhumikaverma245@gmail.com",
+  "anant.24bai10345@vitbhopal.ac.in",
+  "deepakshukla1508.i@gmail.com",
 ];
+
+// Default club name (can be changed by master admin)
+export const DEFAULT_CLUB_NAME = "Matrix Club";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -42,9 +48,6 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Firestore Database
 export const db = getFirestore(app);
-
-// Initialize Firebase Storage
-export const storage = getStorage(app);
 
 // Server timestamp for synchronized timing
 export const getServerTimestamp = () => serverTimestamp();
