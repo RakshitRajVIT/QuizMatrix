@@ -22,21 +22,29 @@ const QuizControl = () => {
     const [transitioning, setTransitioning] = useState(false);
     const autoAdvanceRef = useRef(false); // Prevent multiple auto-advances
     const lastQuestionIndexRef = useRef(-1);
+    const transitioningRef = useRef(false);
 
     // Check if quiz is in self-paced mode
     const isSelfPaced = quiz?.timeMode === 'overall';
+
+    // Keep transitioning ref updated
+    useEffect(() => {
+        transitioningRef.current = transitioning;
+    }, [transitioning]);
 
     // Reset auto-advance flag when question changes
     useEffect(() => {
         if (quiz?.currentQuestionIndex !== lastQuestionIndexRef.current) {
             autoAdvanceRef.current = false;
             lastQuestionIndexRef.current = quiz?.currentQuestionIndex ?? -1;
+            console.log('Question changed to:', quiz?.currentQuestionIndex, '- reset autoAdvanceRef');
         }
     }, [quiz?.currentQuestionIndex]);
 
     const handleNextQuestion = async () => {
-        if (transitioning) return;
+        if (transitioningRef.current) return;
         setTransitioning(true);
+        transitioningRef.current = true;
         try {
             await nextQuestion(quizId, quiz.currentQuestionIndex, questions.length);
         } catch (error) {
@@ -44,6 +52,7 @@ const QuizControl = () => {
             alert('Failed to move to next question');
         }
         setTransitioning(false);
+        transitioningRef.current = false;
     };
 
     // Start self-paced quiz - shows all questions at once
@@ -61,11 +70,16 @@ const QuizControl = () => {
 
     // Auto-advance when timer ends (only for per-question mode)
     const handleAutoNext = useCallback(() => {
+        console.log('handleAutoNext called - autoAdvanceRef:', autoAdvanceRef.current, 'transitioning:', transitioningRef.current);
         if (isSelfPaced) return; // Don't auto-advance in self-paced mode
-        if (autoAdvanceRef.current || transitioning) return;
+        if (autoAdvanceRef.current) {
+            console.log('Already auto-advanced, skipping');
+            return;
+        }
         autoAdvanceRef.current = true;
+        console.log('Triggering auto-advance to next question');
         handleNextQuestion();
-    }, [quizId, quiz?.currentQuestionIndex, questions?.length, transitioning, isSelfPaced]);
+    }, [isSelfPaced, quizId, quiz?.currentQuestionIndex, questions?.length]);
 
     // Handle quiz end for self-paced mode (when total time runs out)
     const handleSelfPacedTimeUp = useCallback(async () => {

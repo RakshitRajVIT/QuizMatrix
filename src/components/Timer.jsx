@@ -59,7 +59,12 @@ const Timer = memo(({
     }, [startTime]);
 
     useEffect(() => {
-        if (!isActive || !startTimeMs) return;
+        console.log('Timer effect - isActive:', isActive, 'startTimeMs:', startTimeMs, 'duration:', duration);
+        
+        if (!isActive || !startTimeMs) {
+            console.log('Timer not active or no start time');
+            return;
+        }
 
         // Calculate time left based on server timestamp
         const calculateTimeLeft = () => {
@@ -73,10 +78,12 @@ const Timer = memo(({
 
         // Set initial time
         const initialTime = calculateTimeLeft();
+        console.log('Timer initial time:', initialTime);
         setTimeLeft(initialTime);
 
         // If already expired, trigger immediately
         if (initialTime <= 0) {
+            console.log('Timer already expired on mount');
             hasEndedRef.current = true;
             if (onTimeUpRef.current) onTimeUpRef.current();
             return;
@@ -88,13 +95,17 @@ const Timer = memo(({
             setTimeLeft(remaining);
 
             if (remaining <= 0 && !hasEndedRef.current) {
+                console.log('Timer reached 0, calling onTimeUp');
                 hasEndedRef.current = true;
                 clearInterval(interval);
                 if (onTimeUpRef.current) onTimeUpRef.current();
             }
         }, 1000);
 
-        return () => clearInterval(interval);
+        return () => {
+            console.log('Timer cleanup');
+            clearInterval(interval);
+        };
     }, [duration, isActive, startTimeMs]);
 
     // Calculate percentage for progress bar
